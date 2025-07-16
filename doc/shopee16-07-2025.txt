@@ -1,0 +1,349 @@
+
+# Shopee Affiliates Open API Documentation
+
+---
+
+## Authentication
+
+All requests require authentication via the `Authorization` header.
+
+### Header Structure
+
+```
+Authorization: SHA256 Credential={AppId}, Timestamp={Timestamp}, Signature={SHA256(Credential+Timestamp+Payload+Secret)}
+```
+
+**Example:**
+
+```
+Authorization: SHA256 Credential=123456, Timestamp=1599999999, Signature=9bc0bd3ba6c41d98a591976bf95db97a58720a9e6d778845408765c3fafad69d
+```
+
+#### Header Components
+
+| Component   | Description |
+|-------------|-------------|
+| SHA256      | The algorithm used to calculate the signature (only SHA256 supported) |
+| Credential  | The Open API appId from the affiliate platform (identifies the request and signature) |
+| Timestamp   | The request timestamp (must be within 10 minutes of server time) |
+| Signature   | 256-bit signature (64 lowercase hex chars): `SHA256(Credential+Timestamp+Payload+Secret)` |
+
+### Signature Calculation
+
+1. Obtain your AppId and Secret from the affiliate platform (keep Secret safe).
+2. Get the payload (request body) as a valid JSON string.
+   - Example:
+     ```json
+     {"query":"{\nbrandOffer{\n    nodes{\n        commissionRate\n        offerName\n    }\n}\n}"}
+     ```
+   - If using string conditions, escape double quotes:
+     ```json
+     {"query":"{conversionReport(purchaseTimeStart: 1600621200, purchaseTimeEnd: 1601225999, scrollId: \"some characters\"){...}}"}
+     ```
+3. Get the current timestamp (Unix epoch seconds).
+4. Concatenate: `AppId + Timestamp + Payload + Secret`.
+5. Calculate the signature:
+   - `signature = SHA256(AppId + Timestamp + Payload + Secret)` (lowercase hex)
+6. Build the Authorization header as above.
+
+**Example Calculation:**
+
+Suppose:
+- AppId = `123456`
+- Secret = `demo`
+- Timestamp = `1577836800` (2020-01-01 00:00:00 UTC)
+- Payload:
+  ```json
+  {"query":"{\nbrandOffer{\n    nodes{\n        commissionRate\n        offerName\n    }\n}\n}"}
+  ```
+
+Steps:
+1. Get payload
+2. Get timestamp
+3. Concatenate: `1234561577836800{"query":"{\nbrandOffer{\n    nodes{\n        commissionRate\n        offerName\n    }\n}\n}"}demo`
+4. SHA256 hash → `dc88d72feea70c80c52c3399751a7d34966763f51a7f056aa070a5e9df645412`
+5. Header:
+   ```
+   Authorization: SHA256 Credential=123456, Timestamp=1577836800, Signature=dc88d72feea70c80c52c3399751a7d34966763f51a7f056aa070a5e9df645412
+   ```
+
+---
+
+## Request and Response
+
+### Request
+
+- Use HTTP `POST` with `Content-Type: application/json`
+- Endpoint: `https://open-api.affiliate.shopee.com.br/graphql`
+- Request body:
+
+```json
+{
+  "query": "...",
+  "operationName": "...", // optional
+  "variables": { "myVariable": "someValue" } // optional
+}
+```
+
+### Response
+
+If successful (HTTP 200):
+
+```json
+{
+  "data": { ... },
+  "errors": [ ... ]
+}
+```
+If no error occurs, the `errors` field is omitted.
+
+
+Error Structure
+#Field              #Type                           #Description
+message	            String	                        Error overview
+path	            String	                        The location of the request in error
+extensions	        object	                        Error details
+extensions.code	    Int	                            Error code
+extensions.message	String	                        Error description
+
+
+Error Codes
+#Error code      #Meaning                           #Description
+10000	         System error	                    System error
+10010	         Request parsing error	            Incorrect query syntax, incorrect field type, API does not exist, etc
+10020	         Identity authentication error	    Signature is incorrect or expired
+10030	         Trigger traffic limiting	        The number of requests exceeds the threshold
+11000	         Business processing error	        Business processing error
+
+
+########################
+# Get Shopee Offer List
+########################
+
+Query: shopeeOfferV2
+ResultType: ShopeeOfferConnectionV2!
+
+Query parameters
+#Field      #Type               #Description             
+keyword	    String	            Search by offer name	
+sortType	Int	                LATEST_DESC = 1
+                                Sort offers by latest update time
+
+                                HIGHEST_COMMISSION_DESC = 2
+                                Sort offers by commission rate from high to low
+
+page	    Int	                Page number	
+limit	    Int	                Number of data per page
+
+
+
+Response parameters:
+#Field       #Type                #Description
+nodes	    [ShopeeOfferV2]!	Data list	
+pageInfo	PageInfo!	        Page information
+
+
+ShopeeOfferV2 structure
+#Field              #Type                #Description
+commissionRate	    String	             Commission rate, e.g. set “0.0123” if the rate is 1.23%	
+imageUrl	        String	             Image url	
+offerLink	        String	             Offer link	
+originalLink	    String	             Original link	
+offerName	        String	             Offer name	
+offerType	        Int	                 CAMPAIGN_TYPE_COLLECTION = 1;CAMPAIGN_TYPE_CATEGORY = 2;
+categoryId	        Int64	             CategoryId returns when offerType = CAMPAIGN_TYPE_CATEGORY
+collectionId	    Int64	             CollectionId returns when offerType = CAMPAIGN_TYPE_COLLECTION
+periodStartTime	    Int	                 Offer start time	
+periodEndTime	    Int	                 Offer end time
+
+
+PageInfo structure
+#Field               #Type                 #Description
+page	            Int	                    The current page number	2
+limit	            Int	                    Number of data per page	10
+hasNextPage	        Bool	                If it has next page	true
+
+
+########################
+# Get Shop Offer List
+########################
+
+Query: shopOfferV2
+ResultType: ShopOfferConnectionV2
+
+Query parameters
+#Field                  #Type               #Description    
+shopId(New)	            Int64	            Search by shop id	84499012
+keyword	                String	            Search by shop name	demo
+shopType(New)	        [Int]	            Filter by specific shop type OFFICIAL_SHOP = 1; Filter mall shop PREFERRED_SHOP = 2; Filter preferred(Star) shop PREFERRED_PLUS_SHOP = 4; Filter preferred(Star+) shop
+isKeySeller(New)        Bool	            Filter for offers from Shopee's key sellers; TRUE = Offers from key sellers; FALSE = All offers regardless of the key seller status
+sortType	            Int	                SHOP_LIST_SORT_TYPE_LATEST_DESC = 1; Sort by last update time; SHOP_LIST_SORT_TYPE_HIGHEST_COMMISSION_DESC = 2 Sort by commission rate from high to low; SHOP_LIST_SORT_TYPE_POPULAR_SHOP_DESC = 3 Sort by Popular shop from high to low
+sellerCommCoveRatio     String	            The ratio of products with seller commission. e.g. set “0.123” if the rate is large or equal to 1.23% "", “0.123”
+page	                Int	                Page number
+limit	                Int	                Number of data per page
+
+Response parameters:
+#Field       #Type                  #Description
+nodes	    [ShopOfferV2]!	        Data list	
+pageInfo	PageInfo!	            Page information
+
+
+ShopOfferV2 structure
+#Field                  #Type                #Description
+commissionRate	        String	            Commission rate, e.g. set “0.0123” if the rate is 1.23%	"0.25"
+imageUrl	            String	            Image url	https://cf.shopee.co.id/file/id-11134201-7qul6-lfgbxyzg074186
+offerLink	            String	            Offer link	https://shope.ee/xxxxxxxx
+originalLink	        String	            Original link	https://shopee.co.id/shop/19162748
+shopId	                Int64	            Shop ID	84499012
+shopName	            String	            Shop name	Ikea
+ratingStar(New)	        String	            Shop Rating in Product Detail Page	"3.7"
+shopType(New)	        [Int]	            OFFICIAL_SHOP = 1 Product offers from official shops / Shopee Mall sellers; PREFERRED_SHOP = 2 Product offers from preferred sellers; PREFERRED_PLUS_SHOP = 4 Product offers from preferred plus sellers
+remainingBudget(New)    Int	                Remaining budget available for this seller's shop offer Unlimited (Offer does not have a budget limit. Offer will end only if the seller terminates the campaign) = 0 Normal (Offer has above 50% budget remaining) = 3 Low (Offer has below 50% budget remaining. Medium risk of running out of budget and offer being terminated early) = 2 Very Low (Offer has below 30% budget remaining. High risk of running out of budget and offer being terminated early) = 1
+periodStartTime	        Int	                Offer start time	1687712400
+periodEndTime	        Int	                Offer end time	1690822799
+sellerCommCoveRatio     String	            The ratio of products with seller commission. e.g. set “0.0123” if the rate is large or equal to 1.23%	"", “0.123”
+bannerInfo	            BannerInfo	        Banner Info	
+
+
+PageInfo structure
+#Field               #Type                 #Description
+page	            Int	                    The current page number	2
+limit	            Int	                    Number of data per page	10
+hasNextPage	        Bool	                If it has next page	true
+
+
+Banner structure
+Field               Type                    Description             Example 
+fileName	        String	                Image file name	        "454.jpg"
+imageUrl	        String	                Image url	            https://cf.shopee.co.id/file/id-11134297-23010-kq42y2823wlv9d
+imageSize	        Int	                    Image size	            1747107
+imageWidth	        Int	                    Image width	            5998
+imageHeight	        Int	                    Image height	        3000
+
+
+Error Code Description
+Error Code          Error Description   
+11000	            Business Error	
+11001	            Params Error : {reason}	
+11002	            Bind Account Error : {reason}	
+10020	            Invalid Signature	
+10020	            Your App has been disabled	
+10020	            Request Expired	
+10020	            Invalid Timestamp	
+10020	            Invalid Credential	
+10020	            Invalid Authorization Header	
+10020	            Unsupported Auth Type	
+10030	            Rate limit exceeded	
+10031	            access deny	
+10032	            invalid affiliate id	
+10033	            account is frozen	
+10034	            affiliate id in black list	
+10035	            You currently do not have access to the Shopee Affiliate Open API Platform. Please contact us to request access or learn more. contact link : https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091	
+
+
+
+########################
+# Get Product Offer List
+########################
+
+Query: productOfferV2
+ResultType: ProductOfferConnectionV2
+
+Query parameters
+#Field                  #Type               #Description 
+shopId(New)	            Int64	            Search by shop id	84499012
+itemId(New)	            Int64	            Search by item id	17979995178
+productCatId(New)	    Int32	            Filter specific Level 1 / Level 2 / Level 3 product category tiers using the category id. Please refer to the following link to find the correct category ids. SG; https://seller.shopee.sg/edu/category-guide MY; https://seller.shopee.com.my/edu/category-guide TH; https://seller.shopee.co.th/edu/category-guide TW; https://seller.shopee.tw/portal/categories ID; https://seller.shopee.co.id/edu/category-guide VN; https://banhang.shopee.vn/edu/category-guide PH; https://seller.shopee.ph/edu/category-guide BR; https://seller.shopee.com.br/edu/category-guide
+listType	            Int	                Type of product offer list, (listType can only be used as a query parameter with matchId, can not be used as a query parameter with the rest of the input). ALL = 0; Recommendation product list, not available to sort ; HIGHEST_COMMISSION = 1 Highest commission product offer list, not available to sort; TOP_PERFORMING = 2 Top performing product offer list, not available to sort; LANDING_CATEGORY = 3 Product offer list of recommendation category in landing page, not available to sort; DETAIL_CATEGORY = 4 Product offer list of specific category in detail page; DETAIL_SHOP = 5 Product offer list of specific shop in detail page; DETAIL_COLLECTION = 6 (To Be Removed) Product offer list of specific collection in detail page;
+matchId	                Int64	            The matchid for specific listType(matchId can only be used as a query parameter with listType, can not be used as a query parameter with the rest of the input). CategoryId for listType = LANDING_CATEGORY and DETAIL_CATEGORY; ShopId for listType = DETAIL_SHOP; CollectionId for listType = DETAIL_COLLECTION
+keyword	                String	            Search by product name	shopee
+sortType	            Int	                RELEVANCE_DESC = 1 Only for search by keyword, and sort by relevance with keyword; ITEM_SOLD_DESC = 2 Sort by sold count from high to low; PRICE_DESC = 3 Sort by price from high to low; PRICE_ASC = 4 Sort by price from low to high; COMMISSION_DESC = 5 Sort by commission rate from high to low
+page	                Int	                Page number	
+isAMSOffer(New)	        Bool	            Filter by type of offer. TRUE = Filter for offers that have seller (AMS) commission. FALSE = Filter for all offers regardless of if there is seller (AMS) commission
+isKeySeller(New)	    Bool	            Filter for offers from Shopee's key sellers; TRUE = Offers from key sellers; FALSE = All offers regardless of the key seller status
+limit	                Int	                Number of data per page	10
+
+
+Response parameters:
+#Field       #Type                  #Description
+nodes	    [ProductOfferV2]!	    Data list	
+pageInfo	PageInfo!	            Page information
+
+
+ProductOfferV2 structure
+#Field                      #Type           #Description
+itemId	                    Int64	        Item ID	17979995178
+commissionRate	            String	        Maximum Commission rate, e.g. set “0.0123” if the rate is 1.23%	"0.25"
+sellerCommissionRate(New)	String	        Seller Commission rate (Commission Xtra rate)	"0.25"
+shopeeCommissionRate(New)	String	        Shopee Commission rate	"0.25"
+commission(New)	            String	        Commission amount = price * commissionRate; Note: The unit is the local currency "27000"
+appExistRate(To Be Removed)	String	        Commission rate for non-first-time order users of this product on the app, e.g. set “0.0123” if the rate is 1.23%	
+appNewRate(To Be Removed)	String	        Commission rate for new users of this product on the app, e.g. set “0.0123” if the rate is 1.23%	
+webExistRate(To Be Removed)	String	        Commission rate for non-first-time order users on the web, e.g. set “0.0123” if the rate is 1.23%	
+webNewRate(To Be Removed)	String	        ommission rate for new users of this product on the web, e.g. set “0.0123” if the rate is 1.23%	
+price(To Be Removed)	    String	        Product Price Note: The unit is the local currency	
+sales	                    Int32	        Sales count for this product	25
+priceMax(New)	            String	        Product maximum price Note: The unit is the local currency "55.99"
+priceMin(New)	            String	        Product minimum price Note: The unit is the local currency "45.99"
+productCatIds(New)	        [Int]	        Product category id. Returns category id level 1, level 2, level 3 in order, or 0 if the relevant level does not exist.	[100012,100068,100259]
+ratingStar(New)	            String	        The product rating shown in Shopee Product Page	"4.7"
+priceDiscountRate(New)	    Int	            The price discount shown in Shopee Product Page. 10 represents 10%	10
+imageUrl	                String	        Image url	
+productName	                String	        Product name	IKEA starfish
+shopId(New)	                Int64	        Shop id	84499012
+shopName	                String	        Shop name	IKEA
+shopType(New)	            [Int]	        OFFICIAL_SHOP = 1; Product offers from official shops / Shopee Mall sellers;PREFERRED_SHOP = 2 Product offers from preferred sellers; PREFERRED_PLUS_SHOP = 4 Product offers from preferred plus sellers
+productLink	                String	        roduct link	https://shopee.co.id/product/14318452/4058376611
+offerLink	                String	        Offer link	https://shope.ee/xxxxxxxx
+periodStartTime	            Int	            Offer Start Time	1687539600
+periodEndTime	            Int	            Offer End Time	1688144399
+
+PageInfo structure
+#Field               #Type                 #Description
+page	            Int	                    The current page number	2
+limit	            Int	                    Number of data per page	10
+hasNextPage	        Bool	                If it has next page	true
+
+Error Code Description
+Error Code          Error Description   
+11000	            Business Error	
+11001	            Params Error : {reason}	
+11002	            Bind Account Error : {reason}	
+10020	            Invalid Signature	
+10020	            Your App has been disabled	
+10020	            Request Expired	
+10020	            Invalid Timestamp	
+10020	            Invalid Credential	
+10020	            Invalid Authorization Header	
+10020	            Unsupported Auth Type	
+10030	            Rate limit exceeded	
+10031	            access deny	
+10032	            invalid affiliate id	
+10033	            account is frozen	
+10034	            affiliate id in black list	
+10035	            You currently do not have access to the Shopee Affiliate Open API Platform. Please contact us to request access or learn more. contact link : https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091
+
+
+
+########################
+# Get Short Link
+########################
+
+Query: generateShortLink
+ResultType: ShortLinkResult!
+
+Parameters
+Field           Type            Description                                                         Example
+originUrl	    String!	        Original url	                                                    https://shopee.com.br/Apple-Iphone-11-128GB-Local-Set-i.52377417.6309028319
+subIds	        [String]	    Sub id in utm content in tracking link, it has five sub ids	        ["s1","s2","s3","s4","s5"]
+
+Result
+Field           Type            Description         Example
+shortLink	    String!	        Short link	
+
+
+Example
+curl -X POST 'https://open-api.affiliate.shopee.com.br/graphql' \
+-H 'Authorization:SHA256 Credential=123456, Signature=x9bc0bd3ba6c41d98a591976bf95db97a58720a9e6d778845408765c3fafad69d, Timestamp=1577836800' \
+-H 'Content-Type: application/json' \
+--data-raw '{"query":"mutation{\n    generateShortLink(input:{originUrl:"https://shopee.com.br/Apple-Iphone-11-128GB-Local-Set-i.52377417.6309028319",subIds:["s1","s2","s3","s4","s5"]}){\n        shortLink\n    }\n}"}'
