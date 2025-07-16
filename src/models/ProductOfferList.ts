@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { ShopeeApiError } from './ShopeeOfferList';
-function generateShopeeAuthorization(appId: string, secret: string, payload: any): { Authorization: string; timestamp: string } {
+export function generateShopeeAuthorization(appId: string, secret: string, payload: any): { Authorization: string; timestamp: string } {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const payloadStr = JSON.stringify(payload);
   const factor = appId + timestamp + payloadStr + secret;
@@ -65,11 +65,13 @@ export interface PageInfo {
   page: number;
   limit: number;
   hasNextPage: boolean;
+  scrollId?: string;
 }
 
 export interface ProductOfferListResponse {
   nodes: ProductOfferV2[];
   pageInfo: PageInfo;
+  scrollId?: string;
 }
 
 export class ProductOfferListService {
@@ -77,7 +79,7 @@ export class ProductOfferListService {
 
   async getProductOfferList(params: ProductOfferListParams): Promise<ProductOfferListResponse> {
     const variables: any = { ...params };
-    const query = `query productOfferV2($shopId: Long, $itemId: Long, $productCatId: Int, $listType: Int, $matchId: Long, $keyword: String, $sortType: Int, $page: Int, $isAMSOffer: Boolean, $isKeySeller: Boolean, $limit: Int) {\n      productOfferV2(shopId: $shopId, itemId: $itemId, productCatId: $productCatId, listType: $listType, matchId: $matchId, keyword: $keyword, sortType: $sortType, page: $page, isAMSOffer: $isAMSOffer, isKeySeller: $isKeySeller, limit: $limit) {\n        nodes {\n          itemId\n          commissionRate\n          sellerCommissionRate\n          shopeeCommissionRate\n          commission\n          appExistRate\n          appNewRate\n          webExistRate\n          webNewRate\n          price\n          sales\n          priceMax\n          priceMin\n          productCatIds\n          ratingStar\n          priceDiscountRate\n          imageUrl\n          productName\n          shopId\n          shopName\n          shopType\n          productLink\n          offerLink\n          periodStartTime\n          periodEndTime\n        }\n        pageInfo {\n          page\n          limit\n          hasNextPage\n        }\n      }\n    }`;
+    const query = `query productOfferV2($shopId: Int64, $itemId: Int64, $productCatId: Int, $listType: Int, $matchId: Int64, $keyword: String, $sortType: Int, $page: Int, $isAMSOffer: Boolean, $isKeySeller: Boolean, $limit: Int) {\n      productOfferV2(shopId: $shopId, itemId: $itemId, productCatId: $productCatId, listType: $listType, matchId: $matchId, keyword: $keyword, sortType: $sortType, page: $page, isAMSOffer: $isAMSOffer, isKeySeller: $isKeySeller, limit: $limit) {\n        nodes {\n          itemId\n          commissionRate\n          sellerCommissionRate\n          shopeeCommissionRate\n          commission\n          appExistRate\n          appNewRate\n          webExistRate\n          webNewRate\n          price\n          sales\n          priceMax\n          priceMin\n          productCatIds\n          ratingStar\n          priceDiscountRate\n          imageUrl\n          productName\n          shopId\n          shopName\n          shopType\n          productLink\n          offerLink\n          periodStartTime\n          periodEndTime\n        }\n        pageInfo {\n          page\n          limit\n          hasNextPage\n        }\n      }\n    }`;
     const payloadObj = {
       query,
       variables,
